@@ -202,7 +202,25 @@ class FullyConnectedNet(object):
         # beta2, etc. Scale parameters should be initialized to ones and shift     #
         # parameters should be initialized to zeros.                               #
         ############################################################################
-        pass
+        
+        
+        # 初始化W,b
+        for layer in range(self.num_layers):
+            
+            if layer==0:
+                layer_dim = (input_dim, hidden_dims[0])
+            elif layer==self.num_layers-1:
+                layer_dim = (hidden_dims[layer - 1], num_classes)
+            else:
+                layer_dim = (hidden_dims[layer - 1], hidden_dims[layer])
+            self.params['W%d'%(layer + 1)] = weight_scale * np.random.randn(layer_dim[0],layer_dim[1])
+            self.params['b%d'%(layer + 1)] = np.zeros(layer_dim[1])   
+        # 初始化batch normlization       
+        if self.normalization and layer!=self.num_layers-1:
+                self.params['gamma%d' % (layer + 1)] = np.ones(layer_dim[1])
+                self.params['beta%d' % (layer + 1)] = np.zeros(layer_dim[1])
+                
+                
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
@@ -261,7 +279,39 @@ class FullyConnectedNet(object):
         # self.bn_params[1] to the forward pass for the second batch normalization #
         # layer, etc.                                                              #
         ############################################################################
-        pass
+        inputi=X
+        # use for BP
+        fc_cache_list=[]
+        relu_cache_list=[]
+        bn_cache_list=[]
+        dropout_cache_list=[]
+        
+        for layer in range(self.num_layers):
+            # forward
+            Wi, bi = self.params['W%d' % (layer + 1)], self.params['b%d' % (layer + 1)]
+            outi, fc_cachei = affine_forward(inputi, Wi, bi)
+            fc_cache_list.append(fc_cachei)
+
+            #batch normalization:the last layer of the network should not be normalized
+            if self.normalization and layer!=self.num_layers-1:
+                gammai, betai = self.params['gamma%d' % (layer + 1)], self.params['beta%d' % (layer + 1)]
+                outi, bn_cachei=batchnorm_forward(outi, gammai, betai, self.bn_params[layer])
+                bn_cache_list.append(bn_cachei)
+            #relu
+            outi, relu_cachei = relu_forward(outi)
+            relu_cache_list.append(relu_cachei)
+
+            #dropout
+            if self.use_dropout:
+                outi, dropout_cachei=dropout_forward(outi, self.dropout_param)
+                dropout_cache_list.append(dropout_cachei)
+
+            inputi=outi
+
+        scores = outi
+        
+        
+        
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
@@ -284,7 +334,34 @@ class FullyConnectedNet(object):
         # automated tests, make sure that your L2 regularization includes a factor #
         # of 0.5 to simplify the expression for the gradient.                      #
         ############################################################################
-        pass
+        data_loss, dout = softmax_loss(scores, y)
+        W_square_sum =0
+        for layer in range(self.num_layers):
+            Wi = self.params['W%d' % (layer+1)]
+            W_square_sum += (np.sum(Wi**2))
+        reg_loss = 0.5*self.reg * W_square_sum
+        loss = data_loss + reg_loss
+
+        for layer in list(range(self.num_layers,0,-1)):
+            #dropout
+            if self.use_dropout:
+                dout=dropout_backward(dout, dropout_cache_list[layer-1])
+            #relu
+            dout = relu_backward(dout, relu_cache_list[layer-1])
+            #batch normalization: the last layer of the network should not be normalized
+            if self.normalization and layer != self.num_layers:
+                dout, dgamma, dbeta = batchnorm_backward(dout, bn_cache_list[layer-1])
+                grads['gamma%d' % (layer)] = dgamma
+                grads['beta%d' % (layer)] = dbeta
+
+            #backforward
+            dxi, dWi, dbi = affine_backward(dout, fc_cache_list[layer-1])
+            dWi+=self.reg*self.params['W%d' % (layer)]
+
+            grads['W%d' % (layer)] = dWi
+            grads['b%d' % (layer)] = dbi
+
+            dout = np.dot(dout, self.params['W%d' % (layer)].T)
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
