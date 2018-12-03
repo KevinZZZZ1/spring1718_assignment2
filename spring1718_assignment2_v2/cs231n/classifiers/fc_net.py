@@ -295,11 +295,14 @@ class FullyConnectedNet(object):
             #batch normalization:the last layer of the network should not be normalized
             if self.normalization and layer!=self.num_layers-1:
                 gammai, betai = self.params['gamma%d' % (layer + 1)], self.params['beta%d' % (layer + 1)]
+    
                 if self.normalization=='batchnorm':
                     outi, bn_cachei=batchnorm_forward(outi, gammai, betai, self.bn_params[layer])
+                    bn_cache_list.append(bn_cachei)
                 if self.normalization=='layernorm':
                     outi, bn_cachei=layernorm_forward(outi, gammai, betai, self.bn_params[layer])
-                bn_cache_list.append(bn_cachei)
+                    bn_cache_list.append(bn_cachei)
+            
             #relu
             outi, relu_cachei = relu_forward(outi)
             relu_cache_list.append(relu_cachei)
